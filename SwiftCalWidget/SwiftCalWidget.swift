@@ -7,46 +7,47 @@
 
 import WidgetKit
 import SwiftUI
-import CoreData
+import SwiftData
 
 struct Provider: TimelineProvider {
-    let viewContext = PersistenceController.shared.container.viewContext
-    
-    var dayFetchRequest: NSFetchRequest<Day> {
-        let request = Day.fetchRequest()
-        
-        request.sortDescriptors = [NSSortDescriptor(keyPath: \Day.date, ascending: true)]
-        request.predicate = NSPredicate(
-            format: "(date >= %@) AND (date <= %@)",
-            Date().startOfCalendarWithPrefixDays as CVarArg,
-            Date().endOfMonth as CVarArg)
-        
-        return request
-    }
     
     func placeholder(in context: Context) -> CalendarEntry {
         CalendarEntry(date: Date(), emoji: "😀", days: [])
     }
     
-    func getSnapshot(in context: Context, completion: @escaping (CalendarEntry) -> ()) {
+    @MainActor func getSnapshot(in context: Context, completion: @escaping (CalendarEntry) -> ()) {
         do {
-            let days = try viewContext.fetch(dayFetchRequest)
-            let entry = CalendarEntry(date: Date(), emoji: "😺", days: days)
+            let entry = CalendarEntry(date: Date(), emoji: "😺", days: fetchDays())
             completion(entry)
-        } catch {
-            print("😈 Widget failed to fecth days in snapshot")
         }
     }
     
-    func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> ()) {
+    @MainActor func getTimeline(in context: Context, completion: @escaping (Timeline<Entry>) -> ()) {
         do {
-            let days = try viewContext.fetch(dayFetchRequest)
-            let entry = CalendarEntry(date: Date(), emoji: "😺", days: days)
+            let entry = CalendarEntry(date: Date(), emoji: "😺", days: fetchDays())
             let timeline = Timeline(entries: [entry], policy: .after(.now.endOfDay))
             completion(timeline)
-        } catch {
-            print("😈 Widget failed to fecth days in snapshot")
         }
+    }
+    
+    @MainActor func fetchDays() -> [Day] {
+        var sharedStoreURL: URL {
+            let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.mx.datafox.SwiftCal")!
+            return container.appendingPathComponent("SwiftCal.sqlite")
+        }
+        
+        let container: ModelContainer = {
+            let config = ModelConfiguration(url: sharedStoreURL)
+            return try! ModelContainer(for: Day.self, configurations: config)
+        }()
+        
+        var startDate: Date { .now.startOfCalendarWithPrefixDays }
+        var endDate: Date { .now.endOfMonth }
+        
+        let predicate =  #Predicate<Day> { $0.date > startDate && $0.date < endDate }
+        let descriptor = FetchDescriptor<Day>(predicate: predicate, sortBy: [.init(\.date)])
+        
+        return try! container.mainContext.fetch(descriptor)
     }
 }
 
@@ -83,10 +84,10 @@ struct SwiftCalWidgetEntryView : View {
                     
                     LazyVGrid(columns: columns, spacing: 7) {
                         ForEach(entry.days) { day in
-                            if day.date!.monthInt != Date().monthInt {
+                            if day.date.monthInt != Date().monthInt {
                                 Text(" ")
                             } else {
-                                Text(day.date!.formatted(.dateTime.day()))
+                                Text(day.date.formatted(.dateTime.day()))
                                     .font(.caption2)
                                     .bold()
                                     .frame(maxWidth: .infinity)
@@ -109,7 +110,7 @@ struct SwiftCalWidgetEntryView : View {
     func calculateStreakValue() -> Int {
         guard !entry.days.isEmpty else { return 0 }
         
-        let nonFutureDays = entry.days.filter { $0.date!.dayInt <= Date().dayInt }
+        let nonFutureDays = entry.days.filter { $0.date.dayInt <= Date().dayInt }
         
         var streakCount = 0
         
@@ -117,7 +118,7 @@ struct SwiftCalWidgetEntryView : View {
             if day.didStudy {
                 streakCount += 1
             } else {
-                if day.date!.dayInt != Date().dayInt {
+                if day.date.dayInt != Date().dayInt {
                     break
                 }
             }

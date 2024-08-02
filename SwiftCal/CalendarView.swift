@@ -6,20 +6,18 @@
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 import WidgetKit
 
 struct CalendarView: View {
     // MARK: Properties
-    @Environment(\.managedObjectContext) private var viewContext
+    @Environment(\.modelContext) private var context
 
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Day.date, ascending: true)],
-        predicate: NSPredicate(format: "(date >= %@) AND (date <= %@)",
-                                Date().startOfCalendarWithPrefixDays as CVarArg,
-                                Date().endOfMonth as CVarArg)
-    )
-    private var days: FetchedResults<Day>
+    @Query(filter: #Predicate<Day> { $0.date > startDate && $0.date < endDate }, sort: \Day.date)
+    var days: [Day]
+    
+    static var startDate: Date { .now.startOfCalendarWithPrefixDays }
+    static var endDate: Date { .now.endOfMonth }
     
     @State private var showNoInFutureMessage = false
     
@@ -32,10 +30,10 @@ struct CalendarView: View {
                 
                 LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: 7)) {
                     ForEach(days) { day in
-                        if day.date!.monthInt != Date().monthInt {
+                        if day.date.monthInt != Date().monthInt {
                             Text("")
                         } else {
-                            Text(day.date!.formatted(.dateTime.day()))
+                            Text(day.date.formatted(.dateTime.day()))
                                 .bold()
                                 .foregroundStyle(day.didStudy ? .green : .secondary)
                                 .frame(maxWidth: .infinity, minHeight: 40)
@@ -44,25 +42,14 @@ struct CalendarView: View {
                                         .foregroundStyle(.green.opacity(day.didStudy ? 0.3 : 0.0))
                                 )
                                 .onTapGesture {
-                                    if day.date!.dayInt <= Date().dayInt {
+                                    if day.date.dayInt <= Date().dayInt {
                                         day.didStudy.toggle()
-                                        
-                                        do {
-                                            try viewContext.save()
-                                            WidgetCenter.shared.reloadTimelines(ofKind: "SwiftCalWidget")
-                                            #if DEBUG
-                                            print("👆🏻 \(day.date!.dayInt) marcado como estudiado")
-                                            #endif
-                                        } catch {
-                                            #if DEBUG
-                                                print("😈 Error al guardar context")
-                                            #endif
-                                        }
+                                        WidgetCenter.shared.reloadTimelines(ofKind: "SwiftCalWidget")
                                     } else {
                                         showNoInFutureMessage.toggle()
                                     }
-                                }
-                        }
+                                } // OnTap
+                        } // Condition
                     } // Loop
                 } // Grid
                 
@@ -88,25 +75,14 @@ struct CalendarView: View {
     
     func createMonthDays(for date: Date) {
         for dayOffset in 0..<date.numberOfDaysInMonth {
-            let newDay = Day(context: viewContext)
-            newDay.date = Calendar.current.date(byAdding: .day, value: dayOffset, to: date.startOfMonth)
-            newDay.didStudy = false
-        }
-        
-        do {
-            try viewContext.save()
-            #if DEBUG
-            print("✅ Días creados para \(date.monthFullName)")
-            #endif
-        } catch {
-            #if DEBUG
-                print("😈 Error al guardar context")
-            #endif
+            let date = Calendar.current.date(byAdding: .day, value: dayOffset, to: date.startOfMonth)!
+            let newDay = Day(date: date, didStudy: false)
+            context.insert(newDay)
         }
     }
 }
 
 // MARK: Preview
 #Preview {
-    CalendarView().environment(\.managedObjectContext, PersistenceController.preview.container.viewContext)
+    CalendarView()
 }

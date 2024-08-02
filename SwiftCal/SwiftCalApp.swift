@@ -6,12 +6,22 @@
 //
 
 import SwiftUI
+import SwiftData
 
 @main
 struct SwiftCalApp: App {
     @State private var selectedTab = 0
     
-    let persistenceController = PersistenceController.shared
+    static var sharedStoreURL: URL {
+        let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.mx.datafox.SwiftCal")!
+        return container.appendingPathComponent("SwiftCal.sqlite")
+    }
+    
+    let container: ModelContainer = {
+        let config = ModelConfiguration(url: sharedStoreURL)
+        return try! ModelContainer(for: Day.self, configurations: config)
+    }()
+    
 
     var body: some Scene {
         WindowGroup {
@@ -24,7 +34,7 @@ struct SwiftCalApp: App {
                     .tabItem { Label("Racha", systemImage: "swift") }
                     .tag(1)
             }
-            .environment(\.managedObjectContext, persistenceController.container.viewContext)
+            .modelContainer(container)
             .onOpenURL { url in
                 selectedTab = url.absoluteString == "calendar" ? 0 : 1
             }
@@ -32,8 +42,8 @@ struct SwiftCalApp: App {
     }
     
     init() {
-    #if DEBUG
-        print("➡️ Base de datos: " + URL.applicationSupportDirectory.path(percentEncoded: false))
-    #endif
+        #if DEBUG
+            print("➡️ Base de datos: " + URL.applicationSupportDirectory.path(percentEncoded: false))
+        #endif
     }
 }

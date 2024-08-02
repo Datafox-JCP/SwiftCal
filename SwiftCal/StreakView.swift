@@ -6,20 +6,19 @@
 //
 
 import SwiftUI
-import CoreData
+import SwiftData
 
 struct StreakView: View {
+    // MARK: Properties
+    @Query(filter: #Predicate<Day> { $0.date > startDate && $0.date < endDate }, sort: \Day.date)
+    var days: [Day]
     
-    @FetchRequest(
-        sortDescriptors: [NSSortDescriptor(keyPath: \Day.date, ascending: true)],
-        predicate: NSPredicate(format: "(date >= %@) AND (date <= %@)",
-                                Date().startOfMonth as CVarArg,
-                                Date().endOfMonth as CVarArg)
-    )
-    private var days: FetchedResults<Day>
+    static var startDate: Date { .now.startOfCalendarWithPrefixDays }
+    static var endDate: Date { .now.endOfMonth }
     
     @State private var streakValue = 0
     
+    // MARK: - View
     var body: some View {
         VStack {
             Text("\(streakValue)")
@@ -38,7 +37,7 @@ struct StreakView: View {
     func calculateStreakValue() -> Int {
         guard !days.isEmpty else { return 0 }
         
-        let nonFutureDays = days.filter { $0.date!.dayInt <= Date().dayInt }
+        let nonFutureDays = days.filter { $0.date.dayInt <= Date().dayInt }
         
         var streakCount = 0
         
@@ -46,7 +45,7 @@ struct StreakView: View {
             if day.didStudy {
                 streakCount += 1
             } else {
-                if day.date!.dayInt != Date().dayInt {
+                if day.date.dayInt != Date().dayInt {
                     break
                 }
             }
@@ -56,6 +55,7 @@ struct StreakView: View {
     }
 }
 
+// MARK: - Preview
 #Preview {
     StreakView()
 }
